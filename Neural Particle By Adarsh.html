@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural Particle Sandbox V2</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #050505;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* HUD Styling */
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 280px;
+            background: rgba(10, 10, 10, 0.85);
+            color: #eee;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(0, 255, 204, 0.2);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transition: box-shadow 0.2s;
+        }
+
+        #hud.dragging {
+            box-shadow: 0 20px 45px rgba(0,0,0,0.7);
+            border-color: rgba(0, 255, 204, 0.5);
+        }
+
+        #hud-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(0, 255, 204, 0.3);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            cursor: grab;
+        }
+
+        #hud-header:active { cursor: grabbing; }
+
+        #hud.minimized #hud-header { margin-bottom: 0; border-bottom: none; }
+
+        #hud-body {
+            overflow: hidden;
+            max-height: 600px;
+            transition: max-height 0.25s ease, opacity 0.2s ease;
+            opacity: 1;
+        }
+
+        #hud.minimized #hud-body {
+            max-height: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.1rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #00ffcc;
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            user-select: none;
+        }
+
+        #minimize-btn {
+            flex: none;
+            width: 22px;
+            height: 22px;
+            padding: 0;
+            font-size: 0.9rem;
+            line-height: 1;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .swatch-group {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .swatch {
+            flex: 1;
+            height: 22px;
+            border-radius: 4px;
+            border: 2px solid rgba(255,255,255,0.15);
+            cursor: pointer;
+            padding: 0;
+            transition: all 0.2s;
+        }
+
+        .swatch:hover { border-color: rgba(255,255,255,0.5); transform: scale(1.05); }
+        .swatch.active { border-color: #fff; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+
+        .stat-val { color: #fff; font-family: monospace; }
+
+        .control-group {
+            margin-top: 20px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            padding-top: 15px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.75rem;
+            color: #00ffcc;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            background: transparent;
+            -webkit-appearance: none;
+            margin-bottom: 15px;
+        }
+        
+        input[type="range"]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 14px;
+            width: 14px;
+            border-radius: 50%;
+            background: #00ffcc;
+            margin-top: -5px;
+            cursor: pointer;
+            box-shadow: 0 0 10px #00ffcc;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        button {
+            flex: 1;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #fff;
+            padding: 8px;
+            font-size: 0.7rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        button:hover { background: rgba(0, 255, 204, 0.1); border-color: #00ffcc; }
+        button.active { background: #00ffcc; color: #000; font-weight: bold; box-shadow: 0 0 15px rgba(0,255,204,0.4); }
+
+        .guide {
+            margin-top: 20px;
+            font-size: 0.7rem;
+            color: #666;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="hud">
+        <div id="hud-header">
+            <h1>System Core <span style="font-size:0.7em; opacity:0.5">v2.0</span></h1>
+            <button id="minimize-btn" title="Minimize">&minus;</button>
+        </div>
+
+        <div id="hud-body">
+            <div class="stat-row">
+                <span>Particles</span>
+                <span class="stat-val" id="count-display">0</span>
+            </div>
+            <div class="stat-row">
+                <span>FPS</span>
+                <span class="stat-val">
+                    <span id="fps-display">60</span>
+                    <span id="perf-badge" title="Auto-lightened for smoother performance" style="display:none; margin-left:6px; color:#050505; background:#00ffcc; border-radius:3px; padding:1px 5px; font-size:0.65rem; letter-spacing:0.5px;">LITE</span>
+                </span>
+            </div>
+
+            <div class="control-group">
+                <label>Connection Range (Neural Density)</label>
+                <input type="range" id="connect-dist" min="0" max="150" value="0">
+
+                <label>Physics Speed</label>
+                <input type="range" id="speed-mult" min="0.1" max="3" step="0.1" value="1">
+            </div>
+
+            <div class="control-group">
+                <label>Simulation Mode</label>
+                <div class="btn-group">
+                    <button onclick="setMode('neural')" id="btn-neural">Neural</button>
+                    <button onclick="setMode('swarm')" id="btn-swarm" class="active">Swarm</button>
+                    <button onclick="setMode('chaos')" id="btn-chaos">Chaos</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Performance</label>
+                <div class="btn-group">
+                    <button onclick="setPerfMode('auto')" id="btn-perf-auto" class="active">Auto</button>
+                    <button onclick="setPerfMode('on')" id="btn-perf-on">Lite</button>
+                    <button onclick="setPerfMode('off')" id="btn-perf-off">Full</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Color Scheme</label>
+                <div class="swatch-group" id="color-swatches">
+                    <button class="swatch active" data-scheme="cyan" style="background:linear-gradient(90deg,hsl(160,100%,55%),hsl(220,100%,60%))" title="Cyan/Blue"></button>
+                    <button class="swatch" data-scheme="fire" style="background:linear-gradient(90deg,hsl(0,100%,55%),hsl(45,100%,55%))" title="Fire"></button>
+                    <button class="swatch" data-scheme="magenta" style="background:linear-gradient(90deg,hsl(280,100%,60%),hsl(330,100%,60%))" title="Magenta"></button>
+                    <button class="swatch" data-scheme="rainbow" style="background:linear-gradient(90deg,red,orange,yellow,green,blue,violet)" title="Rainbow"></button>
+                    <button class="swatch" data-scheme="mono" style="background:linear-gradient(90deg,#888,#fff)" title="Mono"></button>
+                </div>
+            </div>
+
+            <div class="guide">
+                [L-Click] Gravity Well<br>
+                [R-Click] Repulsion Field<br>
+                [L+R Held] Full Chaos Burst<br>
+                [Double-Click] Shockwave<br>
+                [Idle] Forms a living shape<br>
+                [Drag Header] Move Panel
+            </div>
+        </div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        /**
+         * ENGINE V2: Spatial Hash Optimization
+         * To allow connections without O(N^2) complexity, we use a grid system.
+         */
+
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d', { alpha: false }); // Optimize for no transparency on canvas itself
+        
+        // UI Elements
+        const uiCount = document.getElementById('count-display');
+        const uiFps = document.getElementById('fps-display');
+        const uiPerfBadge = document.getElementById('perf-badge');
+        const inputDist = document.getElementById('connect-dist');
+        const inputSpeed = document.getElementById('speed-mult');
+        const btns = {
+            neural: document.getElementById('btn-neural'),
+            swarm: document.getElementById('btn-swarm'),
+            chaos: document.getElementById('btn-chaos')
+        };
+        const perfBtns = {
+            auto: document.getElementById('btn-perf-auto'),
+            on: document.getElementById('btn-perf-on'),
+            off: document.getElementById('btn-perf-off')
+        };
+
+        // State
+        let width, height;
+        let particles = [];
+        let mouse = { x: -1000, y: -1000, active: false, type: 'attract', leftDown: false, rightDown: false };
+        
+        // Settings
+        const config = {
+            count: 1800,
+            baseSpeed: 1.5,
+            friction: 0.96,
+            connectDist: 0, // Controlled by slider
+            speedMult: 1,   // Controlled by slider
+            mode: 'swarm',  // swarm, neural, chaos
+            colorScheme: 'cyan',
+            perfMode: 'auto' // 'auto' | 'on' | 'off'
+        };
+
+        // --- COMBO CLICK (both buttons held) ---
+        let comboActive = false;
+
+        // --- IDLE FORMATION ---
+        let lastInteraction = performance.now();
+        const IDLE_THRESHOLD = 4500; // ms of no input before shape forms
+        let idleT = 0; // grows while idle, used to rotate/breathe the shape
+
+        // --- ADAPTIVE PERFORMANCE ---
+        let perfActive = false;       // whether degraded mode is currently applied
+        let fpsHistory = [];
+        let skipConnectionFrame = false;
+
+        // Color scheme presets: hue range particles are drawn from, saturation,
+        // and the RGB triple used for the connection-line glow.
+        const colorSchemes = {
+            cyan:    { hueMin: 160, hueRange: 60,  sat: 100, connect: '0,255,204' },
+            fire:    { hueMin: 0,   hueRange: 45,  sat: 100, connect: '255,120,0' },
+            magenta: { hueMin: 280, hueRange: 50,  sat: 100, connect: '220,0,255' },
+            rainbow: { hueMin: 0,   hueRange: 360, sat: 100, connect: '255,255,255' },
+            mono:    { hueMin: 0,   hueRange: 0,   sat: 0,   connect: '255,255,255' }
+        };
+
+        // FPS Calculation
+        let lastTime = 0;
+        let frameCount = 0;
+        let fpsTimer = 0;
+
+        // --- GRID SYSTEM FOR OPTIMIZATION ---
+        // Divides screen into cells. Particles only check neighbors.
+        const GRID_SIZE = 100;
+        let grid = {};
+
+        function clearGrid() {
+            grid = {};
+        }
+
+        function addToGrid(p) {
+            // Bitwise floor for minor speedup
+            const col = (p.x / GRID_SIZE) | 0;
+            const row = (p.y / GRID_SIZE) | 0;
+            const key = `${col},${row}`;
+            if (!grid[key]) grid[key] = [];
+            grid[key].push(p);
+        }
+
+        function getNearbyParticles(p) {
+            const col = (p.x / GRID_SIZE) | 0;
+            const row = (p.y / GRID_SIZE) | 0;
+            let nearby = [];
+
+            // Check 3x3 grid around the particle
+            for (let i = -1; i <= 1; i++) {
+                for (let j = -1; j <= 1; j++) {
+                    const key = `${col + i},${row + j}`;
+                    if (grid[key]) {
+                        nearby = nearby.concat(grid[key]);
+                    }
+                }
+            }
+            return nearby;
+        }
+
+        let idleSlotCounter = 0;
+
+        // --- PARTICLE CLASS ---
+        class Particle {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.vx = (Math.random() - 0.5) * config.baseSpeed;
+                this.vy = (Math.random() - 0.5) * config.baseSpeed;
+                this.size = Math.random() * 2 + 1;
+                this.assignHue();
+                // Each particle gets a fixed "slot" in the idle formation,
+                // assigned once so the shape doesn't reshuffle every frame.
+                this.idleSlot = idleSlotCounter++;
+            }
+
+            assignHue() {
+                const scheme = colorSchemes[config.colorScheme];
+                this.hue = scheme.hueMin + Math.random() * scheme.hueRange;
+                this.baseHue = this.hue;
+            }
+
+            update() {
+                // Physics
+                this.x += this.vx * config.speedMult;
+                this.y += this.vy * config.speedMult;
+
+                this.vx *= config.friction;
+                this.vy *= config.friction;
+
+                // Mouse Interaction
+                if (mouse.active) {
+                    const dx = mouse.x - this.x;
+                    const dy = mouse.y - this.y;
+                    const distSq = dx * dx + dy * dy;
+                    
+                    if (distSq < 160000) { // 400px radius
+                        const force = (400 - Math.sqrt(distSq)) / 400;
+                        const angle = Math.atan2(dy, dx);
+                        const dir = mouse.type === 'attract' ? 1 : -4; // Repel is stronger
+                        
+                        const push = force * 0.5 * dir;
+                        
+                        this.vx += Math.cos(angle) * push;
+                        this.vy += Math.sin(angle) * push;
+                        
+                        // Excite color on interaction
+                        this.hue = this.baseHue + 100;
+                    }
+                }
+
+                // COMBO CLICK: both buttons held = full chaos burst from the pointer
+                if (comboActive) {
+                    const dx = this.x - mouse.x;
+                    const dy = this.y - mouse.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                    const angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * 1.2; // scatter the angle
+                    const kick = 6 + Math.random() * 6;
+                    this.vx += Math.cos(angle) * kick;
+                    this.vy += Math.sin(angle) * kick;
+                    // Rainbow strobe while combo is active
+                    this.hue = (this.hue + 25) % 360;
+                }
+
+                // Color Decay
+                if (!comboActive && this.hue > this.baseHue) this.hue -= 2;
+
+                // Mode Specific Behavior
+                if (config.mode === 'chaos') {
+                     this.vx += (Math.random() - 0.5) * 0.2;
+                     this.vy += (Math.random() - 0.5) * 0.2;
+                }
+
+                // IDLE FORMATION: no input for a while -> gently pull into a living shape
+                // so the screen never sits empty/boring.
+                if (idleT > 0 && !mouse.active && !comboActive) {
+                    const target = getIdleTarget(this);
+                    const dx = target.x - this.x;
+                    const dy = target.y - this.y;
+                    // Ramp the pull strength in smoothly over ~2s so the transition isn't jarring
+                    const pull = Math.min(idleT / 2000, 1) * 0.02;
+                    this.vx += dx * pull;
+                    this.vy += dy * pull;
+                }
+
+                // Bounds Wrapping
+                if (this.x < 0) this.x = width;
+                if (this.x > width) this.x = 0;
+                if (this.y < 0) this.y = height;
+                if (this.y > height) this.y = 0;
+            }
+
+            draw() {
+                const sat = colorSchemes[config.colorScheme].sat;
+                ctx.fillStyle = `hsl(${this.hue}, ${sat}%, 60%)`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // --- IDLE FORMATION SHAPE ---
+        // A slowly rotating, breathing spiral-galaxy formation. Computed per-particle
+        // from a fixed "slot" so each particle always eases toward the same point.
+        function getIdleTarget(p) {
+            const total = particles.length || 1;
+            const arms = 5;
+            const armIndex = p.idleSlot % arms;
+            const perArm = Math.ceil(total / arms);
+            const posInArm = Math.floor(p.idleSlot / arms);
+            const t = perArm > 1 ? posInArm / (perArm - 1) : 0; // 0 (center) -> 1 (edge)
+
+            const cx = width / 2;
+            const cy = height / 2;
+            const maxRadius = Math.min(width, height) * 0.38;
+
+            const rotation = idleT * 0.00025;               // slow overall spin
+            const breathe = 1 + Math.sin(idleT * 0.0015 + t * 8) * 0.06; // gentle pulse
+            const radius = t * maxRadius * breathe;
+            const angle = armIndex * ((Math.PI * 2) / arms) + t * 4.2 + rotation;
+
+            return {
+                x: cx + Math.cos(angle) * radius,
+                y: cy + Math.sin(angle) * radius
+            };
+        }
+
+        // --- CORE FUNCTIONS ---
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+
+        function init() {
+            resize();
+            particles = [];
+            for (let i = 0; i < config.count; i++) {
+                particles.push(new Particle());
+            }
+            uiCount.innerText = config.count.toLocaleString();
+        }
+
+        function drawConnections() {
+            if (config.connectDist <= 0) return;
+
+            // Low-end devices: shrink the effective neural range itself (fewer pairs
+            // to test/draw), on top of the frame-skip in animate(). Visually this just
+            // reads as a slightly sparser web rather than a broken effect.
+            const effectiveDist = perfActive ? config.connectDist * 0.65 : config.connectDist;
+            const thresholdSq = effectiveDist * effectiveDist;
+            const connectRgb = colorSchemes[config.colorScheme].connect;
+            ctx.lineWidth = 0.5;
+
+            // Only loop through particles, find their neighbors via grid
+            // This is strictly faster than nested loop
+            particles.forEach(p => {
+                const neighbors = getNearbyParticles(p);
+                neighbors.forEach(n => {
+                    // Avoid double drawing and self-linking
+                    if (p === n) return;
+                    
+                    const dx = p.x - n.x;
+                    const dy = p.y - n.y;
+                    const distSq = dx * dx + dy * dy;
+
+                    if (distSq < thresholdSq) {
+                        const alpha = 1 - (distSq / thresholdSq);
+                        ctx.strokeStyle = `rgba(${connectRgb}, ${alpha * 0.4})`; // Low alpha for performance feel
+                        ctx.beginPath();
+                        ctx.moveTo(p.x, p.y);
+                        ctx.lineTo(n.x, n.y);
+                        ctx.stroke();
+                    }
+                });
+            });
+        }
+
+        function animate(time) {
+            // FPS Meter
+            if (time - lastTime >= 1000) {
+                uiFps.innerText = frameCount;
+                checkPerformance(frameCount);
+                frameCount = 0;
+                lastTime = time;
+            }
+            frameCount++;
+
+            // Combo chaos: both mouse buttons held down
+            comboActive = mouse.leftDown && mouse.rightDown;
+            if (comboActive) lastInteraction = time; // holding combo counts as active input
+
+            // Idle timer: grows only once nothing has happened for a while
+            const sinceInput = time - lastInteraction;
+            idleT = sinceInput > IDLE_THRESHOLD ? (sinceInput - IDLE_THRESHOLD) : 0;
+
+            // Clear Screen
+            ctx.fillStyle = 'rgba(5, 5, 5, 0.3)'; // Trail effect
+            ctx.fillRect(0, 0, width, height);
+
+            // Rebuild Grid
+            clearGrid();
+            particles.forEach(p => {
+                p.update();
+                addToGrid(p);
+            });
+
+            // Draw Connections (Behind particles)
+            // Only enabling specific composite op for glow if needed, else normal for performance
+            // Adaptive perf: on weaker devices, connections are recomputed every other frame
+            // (lines are just left on screen from the previous frame in between - cheap & near-invisible)
+            skipConnectionFrame = !skipConnectionFrame;
+            if (!(perfActive && skipConnectionFrame)) {
+                ctx.globalCompositeOperation = 'lighter';
+                drawConnections();
+                ctx.globalCompositeOperation = 'source-over';
+            }
+
+            // Draw Particles
+            particles.forEach(p => p.draw());
+
+            requestAnimationFrame(animate);
+        }
+
+        // --- ADAPTIVE PERFORMANCE (low-end device support) ---
+        // Watches real FPS and, in 'auto' mode, automatically lightens the neural
+        // connection workload (the most expensive part) when the device is struggling.
+        function checkPerformance(fps) {
+            if (config.perfMode === 'on') { perfActive = true; return; }
+            if (config.perfMode === 'off') { perfActive = false; return; }
+
+            fpsHistory.push(fps);
+            if (fpsHistory.length > 4) fpsHistory.shift();
+            const avg = fpsHistory.reduce((a, b) => a + b, 0) / fpsHistory.length;
+
+            if (!perfActive && avg < 40 && fpsHistory.length >= 3) {
+                perfActive = true;
+                updatePerfBadge();
+            } else if (perfActive && avg > 55 && fpsHistory.length >= 3) {
+                perfActive = false;
+                updatePerfBadge();
+            }
+        }
+
+        function updatePerfBadge() {
+            if (!uiPerfBadge) return;
+            const show = perfActive && config.perfMode === 'auto';
+            uiPerfBadge.style.display = show ? 'inline' : 'none';
+        }
+
+        // --- HUD: DRAG ---
+        const hud = document.getElementById('hud');
+        const hudHeader = document.getElementById('hud-header');
+        let dragOffset = { x: 0, y: 0 };
+        let isDraggingHud = false;
+
+        hudHeader.addEventListener('mousedown', e => {
+            if (e.target.id === 'minimize-btn') return; // let the button handle its own click
+            isDraggingHud = true;
+            hud.classList.add('dragging');
+            const rect = hud.getBoundingClientRect();
+            dragOffset.x = e.clientX - rect.left;
+            dragOffset.y = e.clientY - rect.top;
+            // Lock in pixel coords so we can drag freely (was previously left/top only)
+            hud.style.left = rect.left + 'px';
+            hud.style.top = rect.top + 'px';
+            e.preventDefault();
+        });
+
+        window.addEventListener('mousemove', e => {
+            if (!isDraggingHud) return;
+            const maxX = window.innerWidth - hud.offsetWidth;
+            const maxY = window.innerHeight - hud.offsetHeight;
+            let newX = e.clientX - dragOffset.x;
+            let newY = e.clientY - dragOffset.y;
+            newX = Math.max(0, Math.min(maxX, newX));
+            newY = Math.max(0, Math.min(maxY, newY));
+            hud.style.left = newX + 'px';
+            hud.style.top = newY + 'px';
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (isDraggingHud) {
+                isDraggingHud = false;
+                hud.classList.remove('dragging');
+            }
+        });
+
+        // --- HUD: MINIMIZE ---
+        const minimizeBtn = document.getElementById('minimize-btn');
+        minimizeBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            hud.classList.toggle('minimized');
+            minimizeBtn.innerHTML = hud.classList.contains('minimized') ? '&#43;' : '&minus;';
+        });
+
+        // --- HUD: COLOR SCHEME SWATCHES ---
+        const swatchButtons = document.querySelectorAll('#color-swatches .swatch');
+        swatchButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                config.colorScheme = btn.dataset.scheme;
+                swatchButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                // Recolor existing particles to match the new scheme immediately
+                particles.forEach(p => p.assignHue());
+            });
+        });
+
+        // --- INPUT HANDLING ---
+
+        window.addEventListener('resize', () => {
+            resize();
+            init(); // Re-init on resize to prevent stretching issues
+        });
+
+        // Mouse Move
+        window.addEventListener('mousemove', e => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+            mouse.active = true;
+            lastInteraction = performance.now();
+        });
+
+        // Mouse Down (Left vs Right) - tracks each button independently so we can
+        // detect both held at once for the combo chaos burst
+        window.addEventListener('mousedown', e => {
+            if (e.target.closest('#hud')) return; // Ignore all clicks inside the HUD panel
+
+            if (e.button === 0) { // Left Click
+                mouse.leftDown = true;
+                mouse.type = mouse.rightDown ? mouse.type : 'attract';
+            } else if (e.button === 2) { // Right Click
+                mouse.rightDown = true;
+                mouse.type = mouse.leftDown ? mouse.type : 'repel';
+            }
+            mouse.active = true;
+            lastInteraction = performance.now();
+        });
+
+        window.addEventListener('mouseup', e => {
+            if (e.button === 0) mouse.leftDown = false;
+            if (e.button === 2) mouse.rightDown = false;
+            mouse.active = mouse.leftDown || mouse.rightDown;
+            lastInteraction = performance.now();
+        });
+
+        window.addEventListener('contextmenu', e => e.preventDefault()); // Block context menu for Right Click
+
+        window.addEventListener('dblclick', () => {
+            lastInteraction = performance.now();
+            // Explosive shockwave
+            particles.forEach(p => {
+                const dx = p.x - mouse.x;
+                const dy = p.y - mouse.y;
+                const force = 30; 
+                const angle = Math.atan2(dy, dx);
+                p.vx += Math.cos(angle) * force;
+                p.vy += Math.sin(angle) * force;
+                p.hue = 50; // Flash yellow
+            });
+        });
+
+        // --- UI BINDINGS ---
+        
+        inputDist.addEventListener('input', e => config.connectDist = parseInt(e.target.value));
+        inputSpeed.addEventListener('input', e => config.speedMult = parseFloat(e.target.value));
+
+        window.setMode = function(mode) {
+            lastInteraction = performance.now();
+            config.mode = mode;
+            
+            // Reset button styles
+            Object.values(btns).forEach(b => b.classList.remove('active'));
+            btns[mode].classList.add('active');
+
+            // Apply Presets
+            if (mode === 'neural') {
+                config.connectDist = 100;
+                inputDist.value = 100;
+                config.speedMult = 0.5;
+                inputSpeed.value = 0.5;
+                config.friction = 0.90; // Higher drag for structure
+            } else if (mode === 'swarm') {
+                config.connectDist = 0;
+                inputDist.value = 0;
+                config.speedMult = 1.2;
+                inputSpeed.value = 1.2;
+                config.friction = 0.96;
+            } else if (mode === 'chaos') {
+                config.connectDist = 40;
+                inputDist.value = 40;
+                config.speedMult = 2.0;
+                inputSpeed.value = 2.0;
+                config.friction = 0.98; // Slippery
+            }
+        }
+
+        // --- PERFORMANCE MODE SWITCH ---
+        // Auto: watches FPS and lightens the neural-connection workload if it drops.
+        // Lite: always lightened, good for known low-end devices.
+        // Full: always full quality, for powerful machines.
+        window.setPerfMode = function(mode) {
+            config.perfMode = mode;
+            Object.values(perfBtns).forEach(b => b.classList.remove('active'));
+            perfBtns[mode].classList.add('active');
+
+            if (mode === 'on') {
+                perfActive = true;
+            } else if (mode === 'off') {
+                perfActive = false;
+            } else {
+                perfActive = false; // let checkPerformance() decide from real FPS
+                fpsHistory = [];
+            }
+            updatePerfBadge();
+        }
+
+        // Ignite
+        init();
+        requestAnimationFrame(animate);
+
+    </script>
+</body>
+</html>
