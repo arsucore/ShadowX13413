@@ -18,7 +18,6 @@
             display: block;
         }
 
-        /* HUD Styling */
         #hud {
             position: absolute;
             top: 20px;
@@ -55,7 +54,7 @@
 
         #hud-body {
             overflow: hidden;
-            max-height: 600px;
+            max-height: 650px;
             transition: max-height 0.25s ease, opacity 0.2s ease;
             opacity: 1;
         }
@@ -121,13 +120,14 @@
         .stat-val { color: #fff; font-family: monospace; }
 
         .control-group {
-            margin-top: 20px;
+            margin-top: 15px;
             border-top: 1px solid rgba(255,255,255,0.1);
-            padding-top: 15px;
+            padding-top: 12px;
         }
 
         label {
-            display: block;
+            display: flex;
+            justify-content: space-between;
             font-size: 0.75rem;
             color: #00ffcc;
             margin-bottom: 5px;
@@ -138,7 +138,7 @@
             width: 100%;
             background: transparent;
             -webkit-appearance: none;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
         }
         
         input[type="range"]::-webkit-slider-runnable-track {
@@ -162,7 +162,7 @@
         .btn-group {
             display: flex;
             gap: 10px;
-            margin-top: 10px;
+            margin-top: 8px;
         }
 
         button {
@@ -182,7 +182,7 @@
         button.active { background: #00ffcc; color: #000; font-weight: bold; box-shadow: 0 0 15px rgba(0,255,204,0.4); }
 
         .guide {
-            margin-top: 20px;
+            margin-top: 15px;
             font-size: 0.7rem;
             color: #666;
             line-height: 1.4;
@@ -193,13 +193,13 @@
 
     <div id="hud">
         <div id="hud-header">
-            <h1>System Core <span style="font-size:0.7em; opacity:0.5">v2.0</span></h1>
+            <h1>System Core <span style="font-size:0.7em; opacity:0.5">v2.2</span></h1>
             <button id="minimize-btn" title="Minimize">&minus;</button>
         </div>
 
         <div id="hud-body">
             <div class="stat-row">
-                <span>Particles</span>
+                <span>Active Particles</span>
                 <span class="stat-val" id="count-display">0</span>
             </div>
             <div class="stat-row">
@@ -211,7 +211,10 @@
             </div>
 
             <div class="control-group">
-                <label>Connection Range (Neural Density)</label>
+                <label>Particle Amount <span id="particle-val" class="stat-val">1800</span></label>
+                <input type="range" id="particle-count" min="200" max="4000" step="100" value="1800">
+
+                <label>Connection Range</label>
                 <input type="range" id="connect-dist" min="0" max="150" value="0">
 
                 <label>Physics Speed</label>
@@ -244,15 +247,17 @@
                     <button class="swatch" data-scheme="magenta" style="background:linear-gradient(90deg,hsl(280,100%,60%),hsl(330,100%,60%))" title="Magenta"></button>
                     <button class="swatch" data-scheme="rainbow" style="background:linear-gradient(90deg,red,orange,yellow,green,blue,violet)" title="Rainbow"></button>
                     <button class="swatch" data-scheme="mono" style="background:linear-gradient(90deg,#888,#fff)" title="Mono"></button>
+                    <button class="swatch" data-scheme="gold" style="background:linear-gradient(90deg,hsl(42,90%,40%),hsl(48,100%,65%))" title="Gold"></button>
                 </div>
             </div>
 
             <div class="guide">
                 [L-Click] Gravity Well<br>
+                [L-Hold 5s] Black Hole (All Particles)<br>
                 [R-Click] Repulsion Field<br>
                 [L+R Held] Full Chaos Burst<br>
                 [Double-Click] Shockwave<br>
-                [Idle] Forms a living shape<br>
+                [6s No Move] Rotating Swastika<br>
                 [Drag Header] Move Panel
             </div>
         </div>
@@ -261,18 +266,14 @@
     <canvas id="canvas"></canvas>
 
     <script>
-        /**
-         * ENGINE V2: Spatial Hash Optimization
-         * To allow connections without O(N^2) complexity, we use a grid system.
-         */
-
         const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d', { alpha: false }); // Optimize for no transparency on canvas itself
+        const ctx = canvas.getContext('2d', { alpha: true });
         
-        // UI Elements
         const uiCount = document.getElementById('count-display');
         const uiFps = document.getElementById('fps-display');
         const uiPerfBadge = document.getElementById('perf-badge');
+        const inputCount = document.getElementById('particle-count');
+        const displayParticleVal = document.getElementById('particle-val');
         const inputDist = document.getElementById('connect-dist');
         const inputSpeed = document.getElementById('speed-mult');
         const btns = {
@@ -286,62 +287,49 @@
             off: document.getElementById('btn-perf-off')
         };
 
-        // State
         let width, height;
         let particles = [];
         let mouse = { x: -1000, y: -1000, active: false, type: 'attract', leftDown: false, rightDown: false };
+        let leftMouseDownTime = 0;
         
-        // Settings
         const config = {
             count: 1800,
             baseSpeed: 1.5,
             friction: 0.96,
-            connectDist: 0, // Controlled by slider
-            speedMult: 1,   // Controlled by slider
-            mode: 'swarm',  // swarm, neural, chaos
+            connectDist: 0,
+            speedMult: 1,
+            mode: 'swarm',
             colorScheme: 'cyan',
-            perfMode: 'auto' // 'auto' | 'on' | 'off'
+            perfMode: 'auto'
         };
 
-        // --- COMBO CLICK (both buttons held) ---
         let comboActive = false;
-
-        // --- IDLE FORMATION ---
         let lastInteraction = performance.now();
-        const IDLE_THRESHOLD = 4500; // ms of no input before shape forms
-        let idleT = 0; // grows while idle, used to rotate/breathe the shape
+        const IDLE_THRESHOLD = 6000; // 6 Seconds for Swastika trigger
+        let idleT = 0;
 
-        // --- ADAPTIVE PERFORMANCE ---
-        let perfActive = false;       // whether degraded mode is currently applied
+        let perfActive = false;
         let fpsHistory = [];
         let skipConnectionFrame = false;
 
-        // Color scheme presets: hue range particles are drawn from, saturation,
-        // and the RGB triple used for the connection-line glow.
         const colorSchemes = {
             cyan:    { hueMin: 160, hueRange: 60,  sat: 100, connect: '0,255,204' },
             fire:    { hueMin: 0,   hueRange: 45,  sat: 100, connect: '255,120,0' },
             magenta: { hueMin: 280, hueRange: 50,  sat: 100, connect: '220,0,255' },
             rainbow: { hueMin: 0,   hueRange: 360, sat: 100, connect: '255,255,255' },
-            mono:    { hueMin: 0,   hueRange: 0,   sat: 0,   connect: '255,255,255' }
+            mono:    { hueMin: 0,   hueRange: 0,   sat: 0,   connect: '255,255,255' },
+            gold:    { hueMin: 42,  hueRange: 14,  sat: 90,  connect: '255,195,70' }
         };
 
-        // FPS Calculation
         let lastTime = 0;
         let frameCount = 0;
-        let fpsTimer = 0;
 
-        // --- GRID SYSTEM FOR OPTIMIZATION ---
-        // Divides screen into cells. Particles only check neighbors.
         const GRID_SIZE = 100;
         let grid = {};
 
-        function clearGrid() {
-            grid = {};
-        }
+        function clearGrid() { grid = {}; }
 
         function addToGrid(p) {
-            // Bitwise floor for minor speedup
             const col = (p.x / GRID_SIZE) | 0;
             const row = (p.y / GRID_SIZE) | 0;
             const key = `${col},${row}`;
@@ -354,13 +342,10 @@
             const row = (p.y / GRID_SIZE) | 0;
             let nearby = [];
 
-            // Check 3x3 grid around the particle
             for (let i = -1; i <= 1; i++) {
                 for (let j = -1; j <= 1; j++) {
                     const key = `${col + i},${row + j}`;
-                    if (grid[key]) {
-                        nearby = nearby.concat(grid[key]);
-                    }
+                    if (grid[key]) nearby = nearby.concat(grid[key]);
                 }
             }
             return nearby;
@@ -368,11 +353,8 @@
 
         let idleSlotCounter = 0;
 
-        // --- PARTICLE CLASS ---
         class Particle {
-            constructor() {
-                this.reset();
-            }
+            constructor() { this.reset(); }
 
             reset() {
                 this.x = Math.random() * width;
@@ -381,8 +363,6 @@
                 this.vy = (Math.random() - 0.5) * config.baseSpeed;
                 this.size = Math.random() * 2 + 1;
                 this.assignHue();
-                // Each particle gets a fixed "slot" in the idle formation,
-                // assigned once so the shape doesn't reshuffle every frame.
                 this.idleSlot = idleSlotCounter++;
             }
 
@@ -392,70 +372,74 @@
                 this.baseHue = this.hue;
             }
 
-            update() {
-                // Physics
+            update(now) {
                 this.x += this.vx * config.speedMult;
                 this.y += this.vy * config.speedMult;
 
                 this.vx *= config.friction;
                 this.vy *= config.friction;
 
-                // Mouse Interaction
+                // Mouse interaction / Left-Hold check
                 if (mouse.active) {
-                    const dx = mouse.x - this.x;
-                    const dy = mouse.y - this.y;
-                    const distSq = dx * dx + dy * dy;
-                    
-                    if (distSq < 160000) { // 400px radius
-                        const force = (400 - Math.sqrt(distSq)) / 400;
-                        const angle = Math.atan2(dy, dx);
-                        const dir = mouse.type === 'attract' ? 1 : -4; // Repel is stronger
+                    const holdDuration = mouse.leftDown ? (now - leftMouseDownTime) : 0;
+
+                    if (mouse.leftDown && holdDuration >= 5000) {
+                        // FEATURE 1: 5-Second Hold -> All particles pull to cursor
+                        const dx = mouse.x - this.x;
+                        const dy = mouse.y - this.y;
+                        const pull = 0.12;
                         
-                        const push = force * 0.5 * dir;
+                        this.vx += dx * pull;
+                        this.vy += dy * pull;
+                        this.vx *= 0.82;
+                        this.vy *= 0.82;
+                        this.hue = (this.baseHue + holdDuration * 0.05) % 360;
+                    } else {
+                        // Standard Interaction
+                        const dx = mouse.x - this.x;
+                        const dy = mouse.y - this.y;
+                        const distSq = dx * dx + dy * dy;
                         
-                        this.vx += Math.cos(angle) * push;
-                        this.vy += Math.sin(angle) * push;
-                        
-                        // Excite color on interaction
-                        this.hue = this.baseHue + 100;
+                        if (distSq < 160000) {
+                            const force = (400 - Math.sqrt(distSq)) / 400;
+                            const angle = Math.atan2(dy, dx);
+                            const dir = mouse.type === 'attract' ? 1 : -4;
+                            const push = force * 0.5 * dir;
+                            
+                            this.vx += Math.cos(angle) * push;
+                            this.vy += Math.sin(angle) * push;
+                            this.hue = this.baseHue + 100;
+                        }
                     }
                 }
 
-                // COMBO CLICK: both buttons held = full chaos burst from the pointer
                 if (comboActive) {
                     const dx = this.x - mouse.x;
                     const dy = this.y - mouse.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-                    const angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * 1.2; // scatter the angle
+                    const angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * 1.2;
                     const kick = 6 + Math.random() * 6;
                     this.vx += Math.cos(angle) * kick;
                     this.vy += Math.sin(angle) * kick;
-                    // Rainbow strobe while combo is active
                     this.hue = (this.hue + 25) % 360;
                 }
 
-                // Color Decay
                 if (!comboActive && this.hue > this.baseHue) this.hue -= 2;
 
-                // Mode Specific Behavior
                 if (config.mode === 'chaos') {
                      this.vx += (Math.random() - 0.5) * 0.2;
                      this.vy += (Math.random() - 0.5) * 0.2;
                 }
 
-                // IDLE FORMATION: no input for a while -> gently pull into a living shape
-                // so the screen never sits empty/boring.
+                // FEATURE 2: 6 Seconds No Movement -> Form Rotating Swastika
                 if (idleT > 0 && !mouse.active && !comboActive) {
                     const target = getIdleTarget(this);
                     const dx = target.x - this.x;
                     const dy = target.y - this.y;
-                    // Ramp the pull strength in smoothly over ~2s so the transition isn't jarring
-                    const pull = Math.min(idleT / 2000, 1) * 0.02;
+                    const pull = Math.min(idleT / 1500, 1) * 0.035;
                     this.vx += dx * pull;
                     this.vy += dy * pull;
                 }
 
-                // Bounds Wrapping
                 if (this.x < 0) this.x = width;
                 if (this.x > width) this.x = 0;
                 if (this.y < 0) this.y = height;
@@ -471,65 +455,150 @@
             }
         }
 
-        // --- IDLE FORMATION SHAPE ---
-        // A slowly rotating, breathing spiral-galaxy formation. Computed per-particle
-        // from a fixed "slot" so each particle always eases toward the same point.
+        // Swastika Parametric Generator around Mouse Position
         function getIdleTarget(p) {
             const total = particles.length || 1;
-            const arms = 5;
+            const arms = 4;
             const armIndex = p.idleSlot % arms;
             const perArm = Math.ceil(total / arms);
             const posInArm = Math.floor(p.idleSlot / arms);
-            const t = perArm > 1 ? posInArm / (perArm - 1) : 0; // 0 (center) -> 1 (edge)
+            const t = perArm > 1 ? posInArm / (perArm - 1) : 0;
 
-            const cx = width / 2;
-            const cy = height / 2;
-            const maxRadius = Math.min(width, height) * 0.38;
+            const cx = (mouse.x >= 0 && mouse.x <= width) ? mouse.x : width / 2;
+            const cy = (mouse.y >= 0 && mouse.y <= height) ? mouse.y : height / 2;
 
-            const rotation = idleT * 0.00025;               // slow overall spin
-            const breathe = 1 + Math.sin(idleT * 0.0015 + t * 8) * 0.06; // gentle pulse
-            const radius = t * maxRadius * breathe;
-            const angle = armIndex * ((Math.PI * 2) / arms) + t * 4.2 + rotation;
+            const R = Math.min(width, height) * 0.18;
+
+            let lx = 0, ly = 0;
+            // 4-Fold Symmetric Swastika Arms
+            if (armIndex === 0) { // Up then Right
+                if (t <= 0.5) { lx = 0; ly = -2 * t * R; }
+                else { lx = 2 * (t - 0.5) * R; ly = -R; }
+            } else if (armIndex === 1) { // Right then Down
+                if (t <= 0.5) { lx = 2 * t * R; ly = 0; }
+                else { lx = R; ly = 2 * (t - 0.5) * R; }
+            } else if (armIndex === 2) { // Down then Left
+                if (t <= 0.5) { lx = 0; ly = 2 * t * R; }
+                else { lx = -2 * (t - 0.5) * R; ly = R; }
+            } else if (armIndex === 3) { // Left then Up
+                if (t <= 0.5) { lx = -2 * t * R; ly = 0; }
+                else { lx = -R; ly = -2 * (t - 0.5) * R; }
+            }
+
+            const rotation = idleT * 0.0012;
+            const cosA = Math.cos(rotation);
+            const sinA = Math.sin(rotation);
+
+            const rx = lx * cosA - ly * sinA;
+            const ry = lx * sinA + ly * cosA;
 
             return {
-                x: cx + Math.cos(angle) * radius,
-                y: cy + Math.sin(angle) * radius
+                x: cx + rx,
+                y: cy + ry
             };
         }
 
-        // --- CORE FUNCTIONS ---
+        const nebulaCanvas = document.createElement('canvas');
+        const nebulaCtx = nebulaCanvas.getContext('2d');
+        let stars = [];
+
+        function generateBackground() {
+            nebulaCanvas.width = width;
+            nebulaCanvas.height = height;
+
+            nebulaCtx.fillStyle = '#050505';
+            nebulaCtx.fillRect(0, 0, width, height);
+
+            const blobColors = [
+                'rgba(80, 20, 120, 0.35)',
+                'rgba(10, 60, 90, 0.30)',
+                'rgba(120, 10, 80, 0.22)',
+                'rgba(0, 80, 100, 0.25)',
+                'rgba(40, 10, 70, 0.28)'
+            ];
+
+            blobColors.forEach(color => {
+                const bx = Math.random() * width;
+                const by = Math.random() * height;
+                const br = Math.min(width, height) * (0.25 + Math.random() * 0.35);
+                const grad = nebulaCtx.createRadialGradient(bx, by, 0, bx, by, br);
+                grad.addColorStop(0, color);
+                grad.addColorStop(1, 'rgba(0,0,0,0)');
+                nebulaCtx.fillStyle = grad;
+                nebulaCtx.beginPath();
+                nebulaCtx.arc(bx, by, br, 0, Math.PI * 2);
+                nebulaCtx.fill();
+            });
+
+            stars = [];
+            const starCount = Math.floor((width * height) / 6000);
+            for (let i = 0; i < starCount; i++) {
+                stars.push({
+                    x: Math.random() * width,
+                    y: Math.random() * height,
+                    r: Math.random() * 1.2 + 0.3,
+                    phase: Math.random() * Math.PI * 2,
+                    speed: 0.0008 + Math.random() * 0.002,
+                    baseAlpha: 0.3 + Math.random() * 0.6
+                });
+            }
+        }
+
+        function drawBackground(time) {
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+            ctx.fillRect(0, 0, width, height);
+            ctx.globalCompositeOperation = 'source-over';
+
+            ctx.globalCompositeOperation = 'destination-over';
+            ctx.drawImage(nebulaCanvas, 0, 0);
+            ctx.globalCompositeOperation = 'source-over';
+
+            stars.forEach(s => {
+                const twinkle = 0.5 + 0.5 * Math.sin(time * s.speed + s.phase);
+                ctx.fillStyle = `rgba(255,255,255,${(s.baseAlpha * twinkle).toFixed(3)})`;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
 
         function resize() {
             width = canvas.width = window.innerWidth;
             height = canvas.height = window.innerHeight;
         }
 
-        function init() {
-            resize();
-            particles = [];
-            for (let i = 0; i < config.count; i++) {
+        function setParticleCount(targetCount) {
+            config.count = targetCount;
+            displayParticleVal.innerText = targetCount;
+            uiCount.innerText = targetCount.toLocaleString();
+
+            while (particles.length < targetCount) {
                 particles.push(new Particle());
             }
-            uiCount.innerText = config.count.toLocaleString();
+            if (particles.length > targetCount) {
+                particles.length = targetCount;
+            }
+        }
+
+        function init() {
+            resize();
+            generateBackground();
+            particles = [];
+            setParticleCount(config.count);
         }
 
         function drawConnections() {
             if (config.connectDist <= 0) return;
 
-            // Low-end devices: shrink the effective neural range itself (fewer pairs
-            // to test/draw), on top of the frame-skip in animate(). Visually this just
-            // reads as a slightly sparser web rather than a broken effect.
-            const effectiveDist = perfActive ? config.connectDist * 0.65 : config.connectDist;
+            let effectiveDist = perfActive ? config.connectDist * 0.65 : config.connectDist;
             const thresholdSq = effectiveDist * effectiveDist;
             const connectRgb = colorSchemes[config.colorScheme].connect;
             ctx.lineWidth = 0.5;
 
-            // Only loop through particles, find their neighbors via grid
-            // This is strictly faster than nested loop
             particles.forEach(p => {
                 const neighbors = getNearbyParticles(p);
                 neighbors.forEach(n => {
-                    // Avoid double drawing and self-linking
                     if (p === n) return;
                     
                     const dx = p.x - n.x;
@@ -537,8 +606,8 @@
                     const distSq = dx * dx + dy * dy;
 
                     if (distSq < thresholdSq) {
-                        const alpha = 1 - (distSq / thresholdSq);
-                        ctx.strokeStyle = `rgba(${connectRgb}, ${alpha * 0.4})`; // Low alpha for performance feel
+                        const alpha = (1 - (distSq / thresholdSq));
+                        ctx.strokeStyle = `rgba(${connectRgb}, ${alpha * 0.4})`;
                         ctx.beginPath();
                         ctx.moveTo(p.x, p.y);
                         ctx.lineTo(n.x, n.y);
@@ -549,7 +618,6 @@
         }
 
         function animate(time) {
-            // FPS Meter
             if (time - lastTime >= 1000) {
                 uiFps.innerText = frameCount;
                 checkPerformance(frameCount);
@@ -558,29 +626,22 @@
             }
             frameCount++;
 
-            // Combo chaos: both mouse buttons held down
             comboActive = mouse.leftDown && mouse.rightDown;
-            if (comboActive) lastInteraction = time; // holding combo counts as active input
+            if (comboActive || mouse.leftDown || mouse.rightDown) {
+                lastInteraction = time;
+            }
 
-            // Idle timer: grows only once nothing has happened for a while
             const sinceInput = time - lastInteraction;
             idleT = sinceInput > IDLE_THRESHOLD ? (sinceInput - IDLE_THRESHOLD) : 0;
 
-            // Clear Screen
-            ctx.fillStyle = 'rgba(5, 5, 5, 0.3)'; // Trail effect
-            ctx.fillRect(0, 0, width, height);
+            drawBackground(time);
 
-            // Rebuild Grid
             clearGrid();
             particles.forEach(p => {
-                p.update();
+                p.update(time);
                 addToGrid(p);
             });
 
-            // Draw Connections (Behind particles)
-            // Only enabling specific composite op for glow if needed, else normal for performance
-            // Adaptive perf: on weaker devices, connections are recomputed every other frame
-            // (lines are just left on screen from the previous frame in between - cheap & near-invisible)
             skipConnectionFrame = !skipConnectionFrame;
             if (!(perfActive && skipConnectionFrame)) {
                 ctx.globalCompositeOperation = 'lighter';
@@ -588,15 +649,11 @@
                 ctx.globalCompositeOperation = 'source-over';
             }
 
-            // Draw Particles
             particles.forEach(p => p.draw());
 
             requestAnimationFrame(animate);
         }
 
-        // --- ADAPTIVE PERFORMANCE (low-end device support) ---
-        // Watches real FPS and, in 'auto' mode, automatically lightens the neural
-        // connection workload (the most expensive part) when the device is struggling.
         function checkPerformance(fps) {
             if (config.perfMode === 'on') { perfActive = true; return; }
             if (config.perfMode === 'off') { perfActive = false; return; }
@@ -620,20 +677,19 @@
             uiPerfBadge.style.display = show ? 'inline' : 'none';
         }
 
-        // --- HUD: DRAG ---
+        // HUD Dragging
         const hud = document.getElementById('hud');
         const hudHeader = document.getElementById('hud-header');
         let dragOffset = { x: 0, y: 0 };
         let isDraggingHud = false;
 
         hudHeader.addEventListener('mousedown', e => {
-            if (e.target.id === 'minimize-btn') return; // let the button handle its own click
+            if (e.target.id === 'minimize-btn') return;
             isDraggingHud = true;
             hud.classList.add('dragging');
             const rect = hud.getBoundingClientRect();
             dragOffset.x = e.clientX - rect.left;
             dragOffset.y = e.clientY - rect.top;
-            // Lock in pixel coords so we can drag freely (was previously left/top only)
             hud.style.left = rect.left + 'px';
             hud.style.top = rect.top + 'px';
             e.preventDefault();
@@ -658,7 +714,7 @@
             }
         });
 
-        // --- HUD: MINIMIZE ---
+        // HUD Minimize
         const minimizeBtn = document.getElementById('minimize-btn');
         minimizeBtn.addEventListener('click', e => {
             e.stopPropagation();
@@ -666,26 +722,23 @@
             minimizeBtn.innerHTML = hud.classList.contains('minimized') ? '&#43;' : '&minus;';
         });
 
-        // --- HUD: COLOR SCHEME SWATCHES ---
+        // Swatches
         const swatchButtons = document.querySelectorAll('#color-swatches .swatch');
         swatchButtons.forEach(btn => {
             btn.addEventListener('click', () => {
                 config.colorScheme = btn.dataset.scheme;
                 swatchButtons.forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                // Recolor existing particles to match the new scheme immediately
                 particles.forEach(p => p.assignHue());
             });
         });
 
-        // --- INPUT HANDLING ---
-
+        // Event Listeners
         window.addEventListener('resize', () => {
             resize();
-            init(); // Re-init on resize to prevent stretching issues
+            init();
         });
 
-        // Mouse Move
         window.addEventListener('mousemove', e => {
             mouse.x = e.clientX;
             mouse.y = e.clientY;
@@ -693,15 +746,14 @@
             lastInteraction = performance.now();
         });
 
-        // Mouse Down (Left vs Right) - tracks each button independently so we can
-        // detect both held at once for the combo chaos burst
         window.addEventListener('mousedown', e => {
-            if (e.target.closest('#hud')) return; // Ignore all clicks inside the HUD panel
+            if (e.target.closest('#hud')) return;
 
-            if (e.button === 0) { // Left Click
+            if (e.button === 0) {
                 mouse.leftDown = true;
+                leftMouseDownTime = performance.now();
                 mouse.type = mouse.rightDown ? mouse.type : 'attract';
-            } else if (e.button === 2) { // Right Click
+            } else if (e.button === 2) {
                 mouse.rightDown = true;
                 mouse.type = mouse.leftDown ? mouse.type : 'repel';
             }
@@ -716,11 +768,10 @@
             lastInteraction = performance.now();
         });
 
-        window.addEventListener('contextmenu', e => e.preventDefault()); // Block context menu for Right Click
+        window.addEventListener('contextmenu', e => e.preventDefault());
 
         window.addEventListener('dblclick', () => {
             lastInteraction = performance.now();
-            // Explosive shockwave
             particles.forEach(p => {
                 const dx = p.x - mouse.x;
                 const dy = p.y - mouse.y;
@@ -728,12 +779,12 @@
                 const angle = Math.atan2(dy, dx);
                 p.vx += Math.cos(angle) * force;
                 p.vy += Math.sin(angle) * force;
-                p.hue = 50; // Flash yellow
+                p.hue = 50;
             });
         });
 
-        // --- UI BINDINGS ---
-        
+        // Bindings
+        inputCount.addEventListener('input', e => setParticleCount(parseInt(e.target.value)));
         inputDist.addEventListener('input', e => config.connectDist = parseInt(e.target.value));
         inputSpeed.addEventListener('input', e => config.speedMult = parseFloat(e.target.value));
 
@@ -741,17 +792,15 @@
             lastInteraction = performance.now();
             config.mode = mode;
             
-            // Reset button styles
             Object.values(btns).forEach(b => b.classList.remove('active'));
             btns[mode].classList.add('active');
 
-            // Apply Presets
             if (mode === 'neural') {
                 config.connectDist = 100;
                 inputDist.value = 100;
                 config.speedMult = 0.5;
                 inputSpeed.value = 0.5;
-                config.friction = 0.90; // Higher drag for structure
+                config.friction = 0.90;
             } else if (mode === 'swarm') {
                 config.connectDist = 0;
                 inputDist.value = 0;
@@ -763,14 +812,10 @@
                 inputDist.value = 40;
                 config.speedMult = 2.0;
                 inputSpeed.value = 2.0;
-                config.friction = 0.98; // Slippery
+                config.friction = 0.98;
             }
         }
 
-        // --- PERFORMANCE MODE SWITCH ---
-        // Auto: watches FPS and lightens the neural-connection workload if it drops.
-        // Lite: always lightened, good for known low-end devices.
-        // Full: always full quality, for powerful machines.
         window.setPerfMode = function(mode) {
             config.perfMode = mode;
             Object.values(perfBtns).forEach(b => b.classList.remove('active'));
@@ -781,16 +826,14 @@
             } else if (mode === 'off') {
                 perfActive = false;
             } else {
-                perfActive = false; // let checkPerformance() decide from real FPS
+                perfActive = false;
                 fpsHistory = [];
             }
             updatePerfBadge();
         }
 
-        // Ignite
         init();
         requestAnimationFrame(animate);
-
     </script>
 </body>
 </html>
