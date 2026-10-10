@@ -1,839 +1,328 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neural Particle Sandbox V2</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            background-color: #050505;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            user-select: none;
+<!-- ShadowX13413 — Mobile UI/UX Enhancement -->
+<style id="shadowx-mobile-ui">
+  :root {
+    --sx-cyan: #00ffcc;
+    --sx-panel: rgba(10, 12, 18, .94);
+    --sx-border: rgba(0, 255, 204, .24);
+  }
+
+  html, body {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #canvas {
+    position: fixed;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+  }
+
+  #hud {
+    z-index: 10;
+    box-sizing: border-box;
+    max-width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
+    overflow: hidden;
+    background: var(--sx-panel);
+    border: 1px solid var(--sx-border);
+    box-shadow: 0 12px 40px rgba(0,0,0,.45),
+                0 0 24px rgba(0,255,204,.06);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+
+  #hud-header {
+    min-height: 34px;
+    touch-action: pan-y;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  #minimize-btn {
+    min-width: 40px;
+    min-height: 40px;
+    border-radius: 10px;
+    color: var(--sx-cyan);
+  }
+
+  #hud-body {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0,255,204,.35) transparent;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  button, input, .swatch { touch-action: manipulation; }
+
+  button {
+    min-height: 40px;
+    border-radius: 9px;
+  }
+
+  input[type="range"] {
+    min-height: 30px;
+    cursor: pointer;
+    accent-color: var(--sx-cyan);
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    width: 19px;
+    height: 19px;
+  }
+
+  .swatch { min-height: 34px; border-radius: 8px; }
+
+  button:focus-visible, input:focus-visible {
+    outline: 2px solid var(--sx-cyan);
+    outline-offset: 3px;
+  }
+
+  @media (max-width: 600px) {
+    #hud {
+      position: fixed !important;
+      top: max(10px, env(safe-area-inset-top)) !important;
+      left: 10px !important;
+      right: auto !important;
+      width: min(340px, calc(100vw - 20px));
+      max-width: calc(100vw - 20px);
+      max-height: calc(100vh - 20px);
+      max-height: calc(100dvh - 20px - env(safe-area-inset-top)
+                       - env(safe-area-inset-bottom));
+      padding: 14px;
+      border-radius: 18px;
+    }
+
+    #hud-header {
+      gap: 10px;
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+      cursor: default;
+    }
+
+    #hud-header h1 {
+      gap: 6px;
+      font-size: 1rem;
+      letter-spacing: 1.5px;
+    }
+
+    #hud-body {
+      max-height: calc(100dvh - 110px);
+      padding-bottom: 5px;
+    }
+
+    .stat-row { font-size: .78rem; margin-bottom: 8px; }
+
+    .control-group {
+      margin-top: 12px;
+      padding-top: 11px;
+    }
+
+    label { gap: 8px; font-size: .72rem; line-height: 1.5; }
+
+    .btn-group {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 7px;
+      margin-top: 10px;
+    }
+
+    .btn-group button {
+      min-width: 0;
+      min-height: 42px;
+      padding: 8px 3px;
+      font-size: .66rem;
+      letter-spacing: .3px;
+    }
+
+    .swatch-group { gap: 7px; }
+
+    .guide {
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255,255,255,.08);
+      font-size: .68rem;
+      line-height: 1.8;
+    }
+
+    #hud.minimized {
+      width: auto;
+      max-width: calc(100vw - 20px);
+      padding: 10px 12px;
+    }
+
+    #hud.minimized #hud-header { margin: 0; padding: 0; }
+    #hud.minimized #hud-header h1 { font-size: .85rem; }
+    #hud.minimized #minimize-btn { min-width: 36px; min-height: 36px; }
+  }
+
+  @media (max-width: 380px) {
+    #hud { padding: 11px; }
+    #hud-header h1 { font-size: .9rem; letter-spacing: 1px; }
+    .btn-group { gap: 5px; }
+    .btn-group button { font-size: .61rem; }
+  }
+
+  @media (max-height: 500px) and (max-width: 900px) {
+    #hud { max-height: calc(100dvh - 16px); top: 8px !important; }
+    #hud-body { max-height: calc(100dvh - 90px); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #hud, #hud-body, button, .swatch {
+      transition-duration: .01ms !important;
+    }
+  }
+</style>
+
+<script id="shadowx-mobile-input">
+(() => {
+  if (window.__shadowXMobilePatchInstalled) return;
+  window.__shadowXMobilePatchInstalled = true;
+
+  const canvas = document.getElementById('canvas');
+  const hud = document.getElementById('hud');
+  const header = document.getElementById('hud-header');
+  const minimize = document.getElementById('minimize-btn');
+  if (!canvas || !hud || !header) return;
+
+  const activeTouches = new Map();
+  let lastTap = { time: 0, x: 0, y: 0 };
+  let dragging = null;
+
+  function updateInteraction(event) {
+    if (typeof mouse === 'undefined') return;
+    mouse.x = event.clientX;
+    mouse.y = event.clientY;
+    mouse.active = true;
+    if (typeof lastInteraction !== 'undefined') {
+      lastInteraction = performance.now();
+    }
+  }
+
+  function triggerShockwave(x, y) {
+    if (typeof particles === 'undefined') return;
+    particles.forEach(p => {
+      const dx = p.x - x;
+      const dy = p.y - y;
+      const distance = Math.hypot(dx, dy) || 1;
+      p.vx += dx / distance * 18;
+      p.vy += dy / distance * 18;
+      p.hue = 50;
+    });
+  }
+
+  canvas.addEventListener('pointerdown', event => {
+    if (event.pointerType === 'mouse' || event.target.closest('#hud')) return;
+    event.preventDefault();
+    updateInteraction(event);
+    activeTouches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    if (typeof mouse !== 'undefined') {
+      if (activeTouches.size === 1) {
+        mouse.leftDown = true;
+        mouse.rightDown = false;
+        mouse.type = 'attract';
+        const now = performance.now();
+        const dx = event.clientX - lastTap.x;
+        const dy = event.clientY - lastTap.y;
+        if (now - lastTap.time < 320 && dx * dx + dy * dy < 900) {
+          triggerShockwave(event.clientX, event.clientY);
+          lastTap.time = 0;
+        } else {
+          lastTap = { time: now, x: event.clientX, y: event.clientY };
         }
-
-        canvas {
-            display: block;
-        }
-
-        #hud {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            width: 280px;
-            background: rgba(10, 10, 10, 0.85);
-            color: #eee;
-            padding: 20px;
-            border-radius: 12px;
-            border: 1px solid rgba(0, 255, 204, 0.2);
-            backdrop-filter: blur(10px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            transition: box-shadow 0.2s;
-        }
-
-        #hud.dragging {
-            box-shadow: 0 20px 45px rgba(0,0,0,0.7);
-            border-color: rgba(0, 255, 204, 0.5);
-        }
-
-        #hud-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid rgba(0, 255, 204, 0.3);
-            padding-bottom: 10px;
-            margin-bottom: 15px;
-            cursor: grab;
-        }
-
-        #hud-header:active { cursor: grabbing; }
-
-        #hud.minimized #hud-header { margin-bottom: 0; border-bottom: none; }
-
-        #hud-body {
-            overflow: hidden;
-            max-height: 650px;
-            transition: max-height 0.25s ease, opacity 0.2s ease;
-            opacity: 1;
-        }
-
-        #hud.minimized #hud-body {
-            max-height: 0;
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        h1 {
-            margin: 0;
-            font-size: 1.1rem;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            color: #00ffcc;
-            display: flex;
-            align-items: baseline;
-            gap: 8px;
-            user-select: none;
-        }
-
-        #minimize-btn {
-            flex: none;
-            width: 22px;
-            height: 22px;
-            padding: 0;
-            font-size: 0.9rem;
-            line-height: 1;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .swatch-group {
-            display: flex;
-            gap: 8px;
-            margin-top: 10px;
-        }
-
-        .swatch {
-            flex: 1;
-            height: 22px;
-            border-radius: 4px;
-            border: 2px solid rgba(255,255,255,0.15);
-            cursor: pointer;
-            padding: 0;
-            transition: all 0.2s;
-        }
-
-        .swatch:hover { border-color: rgba(255,255,255,0.5); transform: scale(1.05); }
-        .swatch.active { border-color: #fff; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
-
-        .stat-row {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.8rem;
-            color: #aaa;
-            margin-bottom: 5px;
-        }
-
-        .stat-val { color: #fff; font-family: monospace; }
-
-        .control-group {
-            margin-top: 15px;
-            border-top: 1px solid rgba(255,255,255,0.1);
-            padding-top: 12px;
-        }
-
-        label {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.75rem;
-            color: #00ffcc;
-            margin-bottom: 5px;
-            text-transform: uppercase;
-        }
-
-        input[type="range"] {
-            width: 100%;
-            background: transparent;
-            -webkit-appearance: none;
-            margin-bottom: 12px;
-        }
-        
-        input[type="range"]::-webkit-slider-runnable-track {
-            width: 100%;
-            height: 4px;
-            background: #333;
-            border-radius: 2px;
-        }
-        
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            height: 14px;
-            width: 14px;
-            border-radius: 50%;
-            background: #00ffcc;
-            margin-top: -5px;
-            cursor: pointer;
-            box-shadow: 0 0 10px #00ffcc;
-        }
-
-        .btn-group {
-            display: flex;
-            gap: 10px;
-            margin-top: 8px;
-        }
-
-        button {
-            flex: 1;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            color: #fff;
-            padding: 8px;
-            font-size: 0.7rem;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        button:hover { background: rgba(0, 255, 204, 0.1); border-color: #00ffcc; }
-        button.active { background: #00ffcc; color: #000; font-weight: bold; box-shadow: 0 0 15px rgba(0,255,204,0.4); }
-
-        .guide {
-            margin-top: 15px;
-            font-size: 0.7rem;
-            color: #666;
-            line-height: 1.4;
-        }
-    </style>
-</head>
-<body>
-
-    <div id="hud">
-        <div id="hud-header">
-            <h1>System Core <span style="font-size:0.7em; opacity:0.5">v2.2</span></h1>
-            <button id="minimize-btn" title="Minimize">&minus;</button>
-        </div>
-
-        <div id="hud-body">
-            <div class="stat-row">
-                <span>Active Particles</span>
-                <span class="stat-val" id="count-display">0</span>
-            </div>
-            <div class="stat-row">
-                <span>FPS</span>
-                <span class="stat-val">
-                    <span id="fps-display">60</span>
-                    <span id="perf-badge" title="Auto-lightened for smoother performance" style="display:none; margin-left:6px; color:#050505; background:#00ffcc; border-radius:3px; padding:1px 5px; font-size:0.65rem; letter-spacing:0.5px;">LITE</span>
-                </span>
-            </div>
-
-            <div class="control-group">
-                <label>Particle Amount <span id="particle-val" class="stat-val">1800</span></label>
-                <input type="range" id="particle-count" min="200" max="4000" step="100" value="1800">
-
-                <label>Connection Range</label>
-                <input type="range" id="connect-dist" min="0" max="150" value="0">
-
-                <label>Physics Speed</label>
-                <input type="range" id="speed-mult" min="0.1" max="3" step="0.1" value="1">
-            </div>
-
-            <div class="control-group">
-                <label>Simulation Mode</label>
-                <div class="btn-group">
-                    <button onclick="setMode('neural')" id="btn-neural">Neural</button>
-                    <button onclick="setMode('swarm')" id="btn-swarm" class="active">Swarm</button>
-                    <button onclick="setMode('chaos')" id="btn-chaos">Chaos</button>
-                </div>
-            </div>
-
-            <div class="control-group">
-                <label>Performance</label>
-                <div class="btn-group">
-                    <button onclick="setPerfMode('auto')" id="btn-perf-auto" class="active">Auto</button>
-                    <button onclick="setPerfMode('on')" id="btn-perf-on">Lite</button>
-                    <button onclick="setPerfMode('off')" id="btn-perf-off">Full</button>
-                </div>
-            </div>
-
-            <div class="control-group">
-                <label>Color Scheme</label>
-                <div class="swatch-group" id="color-swatches">
-                    <button class="swatch active" data-scheme="cyan" style="background:linear-gradient(90deg,hsl(160,100%,55%),hsl(220,100%,60%))" title="Cyan/Blue"></button>
-                    <button class="swatch" data-scheme="fire" style="background:linear-gradient(90deg,hsl(0,100%,55%),hsl(45,100%,55%))" title="Fire"></button>
-                    <button class="swatch" data-scheme="magenta" style="background:linear-gradient(90deg,hsl(280,100%,60%),hsl(330,100%,60%))" title="Magenta"></button>
-                    <button class="swatch" data-scheme="rainbow" style="background:linear-gradient(90deg,red,orange,yellow,green,blue,violet)" title="Rainbow"></button>
-                    <button class="swatch" data-scheme="mono" style="background:linear-gradient(90deg,#888,#fff)" title="Mono"></button>
-                    <button class="swatch" data-scheme="gold" style="background:linear-gradient(90deg,hsl(42,90%,40%),hsl(48,100%,65%))" title="Gold"></button>
-                </div>
-            </div>
-
-            <div class="guide">
-                [L-Click] Gravity Well<br>
-                [L-Hold 3s] Black Hole (All Particles)<br>
-                [R-Click] Repulsion Field<br>
-                [L+R Held] Full Chaos Burst<br>
-                [Double-Click] Shockwave<br>
-                [6s No Move] Rotating Swastika<br>
-                [Drag Header] Move Panel
-            </div>
-        </div>
-    </div>
-
-    <canvas id="canvas"></canvas>
-
-    <script>
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d', { alpha: true });
-        
-        const uiCount = document.getElementById('count-display');
-        const uiFps = document.getElementById('fps-display');
-        const uiPerfBadge = document.getElementById('perf-badge');
-        const inputCount = document.getElementById('particle-count');
-        const displayParticleVal = document.getElementById('particle-val');
-        const inputDist = document.getElementById('connect-dist');
-        const inputSpeed = document.getElementById('speed-mult');
-        const btns = {
-            neural: document.getElementById('btn-neural'),
-            swarm: document.getElementById('btn-swarm'),
-            chaos: document.getElementById('btn-chaos')
-        };
-        const perfBtns = {
-            auto: document.getElementById('btn-perf-auto'),
-            on: document.getElementById('btn-perf-on'),
-            off: document.getElementById('btn-perf-off')
-        };
-
-        let width, height;
-        let particles = [];
-        let mouse = { x: -1000, y: -1000, active: false, type: 'attract', leftDown: false, rightDown: false };
-        let leftMouseDownTime = 0;
-        
-        const config = {
-            count: 1800,
-            baseSpeed: 1.5,
-            friction: 0.96,
-            connectDist: 0,
-            speedMult: 1,
-            mode: 'swarm',
-            colorScheme: 'cyan',
-            perfMode: 'auto'
-        };
-
-        let comboActive = false;
-        let lastInteraction = performance.now();
-        const IDLE_THRESHOLD = 6000; // 6 Seconds for Swastika trigger
-        let idleT = 0;
-
-        let perfActive = false;
-        let fpsHistory = [];
-        let skipConnectionFrame = false;
-
-        const colorSchemes = {
-            cyan:    { hueMin: 160, hueRange: 60,  sat: 100, connect: '0,255,204' },
-            fire:    { hueMin: 0,   hueRange: 45,  sat: 100, connect: '255,120,0' },
-            magenta: { hueMin: 280, hueRange: 50,  sat: 100, connect: '220,0,255' },
-            rainbow: { hueMin: 0,   hueRange: 360, sat: 100, connect: '255,255,255' },
-            mono:    { hueMin: 0,   hueRange: 0,   sat: 0,   connect: '255,255,255' },
-            gold:    { hueMin: 42,  hueRange: 14,  sat: 90,  connect: '255,195,70' }
-        };
-
-        let lastTime = 0;
-        let frameCount = 0;
-
-        const GRID_SIZE = 100;
-        let grid = {};
-
-        function clearGrid() { grid = {}; }
-
-        function addToGrid(p) {
-            const col = (p.x / GRID_SIZE) | 0;
-            const row = (p.y / GRID_SIZE) | 0;
-            const key = `${col},${row}`;
-            if (!grid[key]) grid[key] = [];
-            grid[key].push(p);
-        }
-
-        function getNearbyParticles(p) {
-            const col = (p.x / GRID_SIZE) | 0;
-            const row = (p.y / GRID_SIZE) | 0;
-            let nearby = [];
-
-            for (let i = -1; i <= 1; i++) {
-                for (let j = -1; j <= 1; j++) {
-                    const key = `${col + i},${row + j}`;
-                    if (grid[key]) nearby = nearby.concat(grid[key]);
-                }
-            }
-            return nearby;
-        }
-
-        let idleSlotCounter = 0;
-
-        class Particle {
-            constructor() { this.reset(); }
-
-            reset() {
-                this.x = Math.random() * width;
-                this.y = Math.random() * height;
-                this.vx = (Math.random() - 0.5) * config.baseSpeed;
-                this.vy = (Math.random() - 0.5) * config.baseSpeed;
-                this.size = Math.random() * 2 + 1;
-                this.assignHue();
-                this.idleSlot = idleSlotCounter++;
-            }
-
-            assignHue() {
-                const scheme = colorSchemes[config.colorScheme];
-                this.hue = scheme.hueMin + Math.random() * scheme.hueRange;
-                this.baseHue = this.hue;
-            }
-
-            update(now) {
-                this.x += this.vx * config.speedMult;
-                this.y += this.vy * config.speedMult;
-
-                this.vx *= config.friction;
-                this.vy *= config.friction;
-
-                // Mouse interaction / Left-Hold check
-                if (mouse.active) {
-                    const holdDuration = mouse.leftDown ? (now - leftMouseDownTime) : 0;
-
-                    if (mouse.leftDown && holdDuration >= 5000) {
-                        // FEATURE 1: 5-Second Hold -> All particles pull to cursor
-                        const dx = mouse.x - this.x;
-                        const dy = mouse.y - this.y;
-                        const pull = 0.12;
-                        
-                        this.vx += dx * pull;
-                        this.vy += dy * pull;
-                        this.vx *= 0.82;
-                        this.vy *= 0.82;
-                        this.hue = (this.baseHue + holdDuration * 0.05) % 360;
-                    } else {
-                        // Standard Interaction
-                        const dx = mouse.x - this.x;
-                        const dy = mouse.y - this.y;
-                        const distSq = dx * dx + dy * dy;
-                        
-                        if (distSq < 160000) {
-                            const force = (400 - Math.sqrt(distSq)) / 400;
-                            const angle = Math.atan2(dy, dx);
-                            const dir = mouse.type === 'attract' ? 1 : -4;
-                            const push = force * 0.5 * dir;
-                            
-                            this.vx += Math.cos(angle) * push;
-                            this.vy += Math.sin(angle) * push;
-                            this.hue = this.baseHue + 100;
-                        }
-                    }
-                }
-
-                if (comboActive) {
-                    const dx = this.x - mouse.x;
-                    const dy = this.y - mouse.y;
-                    const angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * 1.2;
-                    const kick = 6 + Math.random() * 6;
-                    this.vx += Math.cos(angle) * kick;
-                    this.vy += Math.sin(angle) * kick;
-                    this.hue = (this.hue + 25) % 360;
-                }
-
-                if (!comboActive && this.hue > this.baseHue) this.hue -= 2;
-
-                if (config.mode === 'chaos') {
-                     this.vx += (Math.random() - 0.5) * 0.2;
-                     this.vy += (Math.random() - 0.5) * 0.2;
-                }
-
-                // FEATURE 2: 6 Seconds No Movement -> Form Rotating Swastika
-                if (idleT > 0 && !mouse.active && !comboActive) {
-                    const target = getIdleTarget(this);
-                    const dx = target.x - this.x;
-                    const dy = target.y - this.y;
-                    const pull = Math.min(idleT / 1500, 1) * 0.035;
-                    this.vx += dx * pull;
-                    this.vy += dy * pull;
-                }
-
-                if (this.x < 0) this.x = width;
-                if (this.x > width) this.x = 0;
-                if (this.y < 0) this.y = height;
-                if (this.y > height) this.y = 0;
-            }
-
-            draw() {
-                const sat = colorSchemes[config.colorScheme].sat;
-                ctx.fillStyle = `hsl(${this.hue}, ${sat}%, 60%)`;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-
-        // Swastika Parametric Generator around Mouse Position
-        function getIdleTarget(p) {
-            const total = particles.length || 1;
-            const arms = 4;
-            const armIndex = p.idleSlot % arms;
-            const perArm = Math.ceil(total / arms);
-            const posInArm = Math.floor(p.idleSlot / arms);
-            const t = perArm > 1 ? posInArm / (perArm - 1) : 0;
-
-            const cx = (mouse.x >= 0 && mouse.x <= width) ? mouse.x : width / 2;
-            const cy = (mouse.y >= 0 && mouse.y <= height) ? mouse.y : height / 2;
-
-            const R = Math.min(width, height) * 0.18;
-
-            let lx = 0, ly = 0;
-            // 4-Fold Symmetric Swastika Arms
-            if (armIndex === 0) { // Up then Right
-                if (t <= 0.5) { lx = 0; ly = -2 * t * R; }
-                else { lx = 2 * (t - 0.5) * R; ly = -R; }
-            } else if (armIndex === 1) { // Right then Down
-                if (t <= 0.5) { lx = 2 * t * R; ly = 0; }
-                else { lx = R; ly = 2 * (t - 0.5) * R; }
-            } else if (armIndex === 2) { // Down then Left
-                if (t <= 0.5) { lx = 0; ly = 2 * t * R; }
-                else { lx = -2 * (t - 0.5) * R; ly = R; }
-            } else if (armIndex === 3) { // Left then Up
-                if (t <= 0.5) { lx = -2 * t * R; ly = 0; }
-                else { lx = -R; ly = -2 * (t - 0.5) * R; }
-            }
-
-            const rotation = idleT * 0.0012;
-            const cosA = Math.cos(rotation);
-            const sinA = Math.sin(rotation);
-
-            const rx = lx * cosA - ly * sinA;
-            const ry = lx * sinA + ly * cosA;
-
-            return {
-                x: cx + rx,
-                y: cy + ry
-            };
-        }
-
-        const nebulaCanvas = document.createElement('canvas');
-        const nebulaCtx = nebulaCanvas.getContext('2d');
-        let stars = [];
-
-        function generateBackground() {
-            nebulaCanvas.width = width;
-            nebulaCanvas.height = height;
-
-            nebulaCtx.fillStyle = '#050505';
-            nebulaCtx.fillRect(0, 0, width, height);
-
-            const blobColors = [
-                'rgba(80, 20, 120, 0.35)',
-                'rgba(10, 60, 90, 0.30)',
-                'rgba(120, 10, 80, 0.22)',
-                'rgba(0, 80, 100, 0.25)',
-                'rgba(40, 10, 70, 0.28)'
-            ];
-
-            blobColors.forEach(color => {
-                const bx = Math.random() * width;
-                const by = Math.random() * height;
-                const br = Math.min(width, height) * (0.25 + Math.random() * 0.35);
-                const grad = nebulaCtx.createRadialGradient(bx, by, 0, bx, by, br);
-                grad.addColorStop(0, color);
-                grad.addColorStop(1, 'rgba(0,0,0,0)');
-                nebulaCtx.fillStyle = grad;
-                nebulaCtx.beginPath();
-                nebulaCtx.arc(bx, by, br, 0, Math.PI * 2);
-                nebulaCtx.fill();
-            });
-
-            stars = [];
-            const starCount = Math.floor((width * height) / 6000);
-            for (let i = 0; i < starCount; i++) {
-                stars.push({
-                    x: Math.random() * width,
-                    y: Math.random() * height,
-                    r: Math.random() * 1.2 + 0.3,
-                    phase: Math.random() * Math.PI * 2,
-                    speed: 0.0008 + Math.random() * 0.002,
-                    baseAlpha: 0.3 + Math.random() * 0.6
-                });
-            }
-        }
-
-        function drawBackground(time) {
-            ctx.globalCompositeOperation = 'destination-out';
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
-            ctx.fillRect(0, 0, width, height);
-            ctx.globalCompositeOperation = 'source-over';
-
-            ctx.globalCompositeOperation = 'destination-over';
-            ctx.drawImage(nebulaCanvas, 0, 0);
-            ctx.globalCompositeOperation = 'source-over';
-
-            stars.forEach(s => {
-                const twinkle = 0.5 + 0.5 * Math.sin(time * s.speed + s.phase);
-                ctx.fillStyle = `rgba(255,255,255,${(s.baseAlpha * twinkle).toFixed(3)})`;
-                ctx.beginPath();
-                ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-                ctx.fill();
-            });
-        }
-
-        function resize() {
-            width = canvas.width = window.innerWidth;
-            height = canvas.height = window.innerHeight;
-        }
-
-        function setParticleCount(targetCount) {
-            config.count = targetCount;
-            displayParticleVal.innerText = targetCount;
-            uiCount.innerText = targetCount.toLocaleString();
-
-            while (particles.length < targetCount) {
-                particles.push(new Particle());
-            }
-            if (particles.length > targetCount) {
-                particles.length = targetCount;
-            }
-        }
-
-        function init() {
-            resize();
-            generateBackground();
-            particles = [];
-            setParticleCount(config.count);
-        }
-
-        function drawConnections() {
-            if (config.connectDist <= 0) return;
-
-            let effectiveDist = perfActive ? config.connectDist * 0.65 : config.connectDist;
-            const thresholdSq = effectiveDist * effectiveDist;
-            const connectRgb = colorSchemes[config.colorScheme].connect;
-            ctx.lineWidth = 0.5;
-
-            particles.forEach(p => {
-                const neighbors = getNearbyParticles(p);
-                neighbors.forEach(n => {
-                    if (p === n) return;
-                    
-                    const dx = p.x - n.x;
-                    const dy = p.y - n.y;
-                    const distSq = dx * dx + dy * dy;
-
-                    if (distSq < thresholdSq) {
-                        const alpha = (1 - (distSq / thresholdSq));
-                        ctx.strokeStyle = `rgba(${connectRgb}, ${alpha * 0.4})`;
-                        ctx.beginPath();
-                        ctx.moveTo(p.x, p.y);
-                        ctx.lineTo(n.x, n.y);
-                        ctx.stroke();
-                    }
-                });
-            });
-        }
-
-        function animate(time) {
-            if (time - lastTime >= 1000) {
-                uiFps.innerText = frameCount;
-                checkPerformance(frameCount);
-                frameCount = 0;
-                lastTime = time;
-            }
-            frameCount++;
-
-            comboActive = mouse.leftDown && mouse.rightDown;
-            if (comboActive || mouse.leftDown || mouse.rightDown) {
-                lastInteraction = time;
-            }
-
-            const sinceInput = time - lastInteraction;
-            idleT = sinceInput > IDLE_THRESHOLD ? (sinceInput - IDLE_THRESHOLD) : 0;
-
-            drawBackground(time);
-
-            clearGrid();
-            particles.forEach(p => {
-                p.update(time);
-                addToGrid(p);
-            });
-
-            skipConnectionFrame = !skipConnectionFrame;
-            if (!(perfActive && skipConnectionFrame)) {
-                ctx.globalCompositeOperation = 'lighter';
-                drawConnections();
-                ctx.globalCompositeOperation = 'source-over';
-            }
-
-            particles.forEach(p => p.draw());
-
-            requestAnimationFrame(animate);
-        }
-
-        function checkPerformance(fps) {
-            if (config.perfMode === 'on') { perfActive = true; return; }
-            if (config.perfMode === 'off') { perfActive = false; return; }
-
-            fpsHistory.push(fps);
-            if (fpsHistory.length > 4) fpsHistory.shift();
-            const avg = fpsHistory.reduce((a, b) => a + b, 0) / fpsHistory.length;
-
-            if (!perfActive && avg < 40 && fpsHistory.length >= 3) {
-                perfActive = true;
-                updatePerfBadge();
-            } else if (perfActive && avg > 55 && fpsHistory.length >= 3) {
-                perfActive = false;
-                updatePerfBadge();
-            }
-        }
-
-        function updatePerfBadge() {
-            if (!uiPerfBadge) return;
-            const show = perfActive && config.perfMode === 'auto';
-            uiPerfBadge.style.display = show ? 'inline' : 'none';
-        }
-
-        // HUD Dragging
-        const hud = document.getElementById('hud');
-        const hudHeader = document.getElementById('hud-header');
-        let dragOffset = { x: 0, y: 0 };
-        let isDraggingHud = false;
-
-        hudHeader.addEventListener('mousedown', e => {
-            if (e.target.id === 'minimize-btn') return;
-            isDraggingHud = true;
-            hud.classList.add('dragging');
-            const rect = hud.getBoundingClientRect();
-            dragOffset.x = e.clientX - rect.left;
-            dragOffset.y = e.clientY - rect.top;
-            hud.style.left = rect.left + 'px';
-            hud.style.top = rect.top + 'px';
-            e.preventDefault();
-        });
-
-        window.addEventListener('mousemove', e => {
-            if (!isDraggingHud) return;
-            const maxX = window.innerWidth - hud.offsetWidth;
-            const maxY = window.innerHeight - hud.offsetHeight;
-            let newX = e.clientX - dragOffset.x;
-            let newY = e.clientY - dragOffset.y;
-            newX = Math.max(0, Math.min(maxX, newX));
-            newY = Math.max(0, Math.min(maxY, newY));
-            hud.style.left = newX + 'px';
-            hud.style.top = newY + 'px';
-        });
-
-        window.addEventListener('mouseup', () => {
-            if (isDraggingHud) {
-                isDraggingHud = false;
-                hud.classList.remove('dragging');
-            }
-        });
-
-        // HUD Minimize
-        const minimizeBtn = document.getElementById('minimize-btn');
-        minimizeBtn.addEventListener('click', e => {
-            e.stopPropagation();
-            hud.classList.toggle('minimized');
-            minimizeBtn.innerHTML = hud.classList.contains('minimized') ? '&#43;' : '&minus;';
-        });
-
-        // Swatches
-        const swatchButtons = document.querySelectorAll('#color-swatches .swatch');
-        swatchButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                config.colorScheme = btn.dataset.scheme;
-                swatchButtons.forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                particles.forEach(p => p.assignHue());
-            });
-        });
-
-        // Event Listeners
-        window.addEventListener('resize', () => {
-            resize();
-            init();
-        });
-
-        window.addEventListener('mousemove', e => {
-            mouse.x = e.clientX;
-            mouse.y = e.clientY;
-            mouse.active = true;
-            lastInteraction = performance.now();
-        });
-
-        window.addEventListener('mousedown', e => {
-            if (e.target.closest('#hud')) return;
-
-            if (e.button === 0) {
-                mouse.leftDown = true;
-                leftMouseDownTime = performance.now();
-                mouse.type = mouse.rightDown ? mouse.type : 'attract';
-            } else if (e.button === 2) {
-                mouse.rightDown = true;
-                mouse.type = mouse.leftDown ? mouse.type : 'repel';
-            }
-            mouse.active = true;
-            lastInteraction = performance.now();
-        });
-
-        window.addEventListener('mouseup', e => {
-            if (e.button === 0) mouse.leftDown = false;
-            if (e.button === 2) mouse.rightDown = false;
-            mouse.active = mouse.leftDown || mouse.rightDown;
-            lastInteraction = performance.now();
-        });
-
-        window.addEventListener('contextmenu', e => e.preventDefault());
-
-        window.addEventListener('dblclick', () => {
-            lastInteraction = performance.now();
-            particles.forEach(p => {
-                const dx = p.x - mouse.x;
-                const dy = p.y - mouse.y;
-                const force = 30; 
-                const angle = Math.atan2(dy, dx);
-                p.vx += Math.cos(angle) * force;
-                p.vy += Math.sin(angle) * force;
-                p.hue = 50;
-            });
-        });
-
-        // Bindings
-        inputCount.addEventListener('input', e => setParticleCount(parseInt(e.target.value)));
-        inputDist.addEventListener('input', e => config.connectDist = parseInt(e.target.value));
-        inputSpeed.addEventListener('input', e => config.speedMult = parseFloat(e.target.value));
-
-        window.setMode = function(mode) {
-            lastInteraction = performance.now();
-            config.mode = mode;
-            
-            Object.values(btns).forEach(b => b.classList.remove('active'));
-            btns[mode].classList.add('active');
-
-            if (mode === 'neural') {
-                config.connectDist = 100;
-                inputDist.value = 100;
-                config.speedMult = 0.5;
-                inputSpeed.value = 0.5;
-                config.friction = 0.90;
-            } else if (mode === 'swarm') {
-                config.connectDist = 0;
-                inputDist.value = 0;
-                config.speedMult = 1.2;
-                inputSpeed.value = 1.2;
-                config.friction = 0.96;
-            } else if (mode === 'chaos') {
-                config.connectDist = 40;
-                inputDist.value = 40;
-                config.speedMult = 2.0;
-                inputSpeed.value = 2.0;
-                config.friction = 0.98;
-            }
-        }
-
-        window.setPerfMode = function(mode) {
-            config.perfMode = mode;
-            Object.values(perfBtns).forEach(b => b.classList.remove('active'));
-            perfBtns[mode].classList.add('active');
-
-            if (mode === 'on') {
-                perfActive = true;
-            } else if (mode === 'off') {
-                perfActive = false;
-            } else {
-                perfActive = false;
-                fpsHistory = [];
-            }
-            updatePerfBadge();
-        }
-
-        init();
-        requestAnimationFrame(animate);
-    </script>
-</body>
-</html>
+      } else {
+        mouse.rightDown = true;
+        mouse.type = 'repel';
+      }
+    }
+
+    try { canvas.setPointerCapture(event.pointerId); } catch (_) {}
+  }, { passive: false });
+
+  canvas.addEventListener('pointermove', event => {
+    if (event.pointerType === 'mouse' || !activeTouches.has(event.pointerId)) return;
+    event.preventDefault();
+    updateInteraction(event);
+    activeTouches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  }, { passive: false });
+
+  function endTouch(event) {
+    if (event.pointerType === 'mouse' || !activeTouches.has(event.pointerId)) return;
+    activeTouches.delete(event.pointerId);
+    if (typeof mouse === 'undefined') return;
+
+    if (!activeTouches.size) {
+      mouse.leftDown = false;
+      mouse.rightDown = false;
+      mouse.active = false;
+    } else {
+      const point = activeTouches.values().next().value;
+      mouse.x = point.x;
+      mouse.y = point.y;
+      mouse.leftDown = true;
+      mouse.rightDown = false;
+      mouse.type = 'attract';
+    }
+  }
+
+  canvas.addEventListener('pointerup', endTouch);
+  canvas.addEventListener('pointercancel', endTouch);
+  canvas.addEventListener('lostpointercapture', endTouch);
+  canvas.addEventListener('contextmenu', event => event.preventDefault());
+
+  header.addEventListener('pointerdown', event => {
+    if (event.pointerType === 'mouse' ||
+        event.target === minimize ||
+        event.target.closest('button')) return;
+
+    event.preventDefault();
+    const rect = hud.getBoundingClientRect();
+    dragging = {
+      id: event.pointerId,
+      dx: event.clientX - rect.left,
+      dy: event.clientY - rect.top
+    };
+    hud.style.left = rect.left + 'px';
+    hud.style.top = rect.top + 'px';
+    hud.style.right = 'auto';
+    hud.classList.add('dragging');
+    try { header.setPointerCapture(event.pointerId); } catch (_) {}
+  });
+
+  header.addEventListener('pointermove', event => {
+    if (!dragging || dragging.id !== event.pointerId) return;
+    event.preventDefault();
+    const maxX = Math.max(0, innerWidth - hud.offsetWidth);
+    const maxY = Math.max(0, innerHeight - hud.offsetHeight);
+    hud.style.left = Math.max(0, Math.min(maxX, event.clientX - dragging.dx)) + 'px';
+    hud.style.top = Math.max(0, Math.min(maxY, event.clientY - dragging.dy)) + 'px';
+  });
+
+  function stopDragging(event) {
+    if (!dragging || dragging.id !== event.pointerId) return;
+    dragging = null;
+    hud.classList.remove('dragging');
+  }
+
+  header.addEventListener('pointerup', stopDragging);
+  header.addEventListener('pointercancel', stopDragging);
+  header.addEventListener('lostpointercapture', stopDragging);
+
+  window.addEventListener('resize', () => {
+    if (!matchMedia('(max-width: 600px)').matches) return;
+    const rect = hud.getBoundingClientRect();
+    hud.style.left = Math.max(0, Math.min(innerWidth - hud.offsetWidth, rect.left)) + 'px';
+    hud.style.top = Math.max(0, Math.min(innerHeight - hud.offsetHeight, rect.top)) + 'px';
+  }, { passive: true });
+})();
+</script>
